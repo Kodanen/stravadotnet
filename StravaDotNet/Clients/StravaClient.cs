@@ -68,6 +68,8 @@ namespace Strava.Clients
         /// <seealso cref="StaticAuthentication"/>
         public StravaClient(IAuthentication authenticator)
         {
+            Console.WriteLine("StravaClient loaded");
+
             if (authenticator != null)
             {
                 _authenticator = authenticator;

@@ -287,6 +287,8 @@ namespace Strava.Clients
         {
             string getUrl = string.Format("{0}?page={1}&per_page={2}&access_token={3}", Endpoints.Activities, page, perPage, Authentication.AccessToken);
             string json = await Http.WebRequest.SendGetAsync(new Uri(getUrl));
+            Console.WriteLine(getUrl);
+            Console.WriteLine(json);
 
             return Unmarshaller<List<ActivitySummary>>.Unmarshal(json);
         }
@@ -573,6 +575,9 @@ namespace Strava.Clients
                 perPage,
                 Authentication.AccessToken);
             string json = await Http.WebRequest.SendGetAsync(new Uri(getUrl));
+
+            Console.WriteLine(getUrl);
+            Console.WriteLine(json);            
 
             return Unmarshaller<List<ActivitySummary>>.Unmarshal(json);
         }

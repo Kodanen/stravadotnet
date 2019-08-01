@@ -50,6 +50,8 @@ namespace Strava.Clients
             string getUrl = string.Format("{0}?access_token={1}", Endpoints.Athlete, Authentication.AccessToken);
             string json = await WebRequest.SendGetAsync(new Uri(getUrl));
 
+            Console.WriteLine("GetAthlete: " + getUrl);
+
             return Unmarshaller<Athlete>.Unmarshal(json);
         }
 

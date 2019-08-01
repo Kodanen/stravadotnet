@@ -101,7 +101,7 @@ namespace Strava.Authentication
                     scopeLevel = "write";
                     break;
             }
-
+            
             Process process = new Process();
             process.StartInfo = new ProcessStartInfo(string.Format("{0}?client_id={1}&response_type=code&redirect_uri=http://localhost:{2}&scope={3}&approval_prompt=auto", url, clientId, callbackPort, scopeLevel));
             process.Start();
