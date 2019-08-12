@@ -36,6 +36,9 @@ namespace Test
         static WebAuthentication auth;
         private static async Task<string> StravaConnect()
         {
+            List<MAFData> data = new List<MAFData>();
+            DateTime start = new DateTime();
+
             //StaticAuthentication auth = new StaticAuthentication("37f5eeeae3d0d2484861ed25ccb52ea63adb41ee ");
             auth = new WebAuthentication();
 
@@ -73,22 +76,141 @@ namespace Test
             StravaClient client = new StravaClient(auth);            
 
             var b = await client.Athletes.GetAthleteAsync();
-            Console.WriteLine(" - Athlete: " + b.FirstName);
+            Console.Write("Getting athlete: " + b.FirstName + " ");
+            start = DateTime.Now;
 
-            var activities = client.Activities.GetActivities(System.DateTime.Now.Subtract(new System.TimeSpan(7, 0, 0, 0)), System.DateTime.Now);
+            // Get last x days of activities
+            var activities = client.Activities.GetActivities(System.DateTime.Now.Subtract(new System.TimeSpan(360, 0, 0, 0)), System.DateTime.Now);
+            Console.WriteLine(" Total of " + activities.Count() + " activities");
+            
+            //List<Strava.Activities.ActivitySummary> activities = new List<ActivitySummary>();
+            //ActivitySummary test = new ActivitySummary();
+            //test.Id = 2344450602; // Mattojuoksu
+            //test.Id = 2606121265; // 10 + 50 + 10min
+            //test.Id = 2344450396; // Aurajoen yöjuoksu
+            //activities.Add(test);
+            
+
             foreach (var activity in activities)
             {
                 Console.WriteLine(" - Activity: " + activity.Id);
 
                 // Request activity data
                 Activity a = client.Activities.GetActivity(activity.Id.ToString(), true);
+                Console.Write("  - Type: " + a.Type.ToString() + " Distance " + a.Distance.ToString() + " Elapsed: " + a.ElapsedTimeSpan.ToString());
 
-                Console.WriteLine("  - Type: " + a.Type.ToString());
-                Console.WriteLine("  - Elapsed time: " + a.ElapsedTimeSpan.ToString());
-                Console.WriteLine("  - Distance: " + a.Distance.ToString());
-                Console.WriteLine();
+                // Add activity to data
+                data.Add(new MAFData(activity.Id.ToString(), a.DateTimeStart, a.Distance/1000.0f));
+                data.First().Athlete = b.FirstName + " " + b.LastName;
+                data.First().avgCadence = a.AverageCadence * 2.0f;
+                data.First().avgHeartrate = a.AverageHeartrate;
+                data.First().avgSpeed = a.AverageSpeed * 3.6f;
+                data.First().avgTemperature = a.AverageTemperature;
+                data.First().Calories = a.Calories;
+                data.First().Elapsed = a.ElapsedTimeSpan;
+                data.First().SufferScore = (int)a.SufferScore;
+                
+                // Get activity laps
+                var laps = client.Activities.GetActivityLaps(activity.Id.ToString());
+                Console.WriteLine(" " + laps.Count() + " laps");
+
+                float distance = 0;
+                foreach(var lap in laps)
+                {
+                    //Console.WriteLine("   Lap " + lap.LapIndex + " " + lap.ElapsedTimeSpan.ToString() + " " + lap.MovingTimeSpan.ToString() + " " + (lap.AverageCadence * 2.0).ToString("N0") + "spm " + lap.AverageHeartrate + "bpm " + (lap.AverageSpeed * 3.6).ToString("N2") + "km/h " + lap.Distance + "m " + lap.MaxHeartrate + "bpm " + lap.TotalElevationGain + "m ");
+
+                    // Cumulative distance for the activity
+                    distance += lap.Distance;
+
+                    // Fill in lap data
+                    MAFLap m = new MAFLap();
+                    m.avgCadence = lap.AverageCadence * 2.0f;
+                    m.avgHeartrate = lap.AverageHeartrate;
+                    m.avgSpeed = lap.AverageSpeed * 3.6f;
+                    m.cumDistance = distance / 1000.0f;
+                    m.Length = lap.Distance;
+                    m.Duration = lap.MovingTimeSpan;
+                    m.ElevationGain = lap.TotalElevationGain;
+                    m.Lap = lap.LapIndex;
+                    m.maxHeartrate = lap.MaxHeartrate;
+                    // Add lap to activity
+                    data.First(i => i.ActivityID == activity.Id.ToString()).Laps.Add(m);
+                }                
+
+                // Get activity stream
+                start = DateTime.Now;
+                //Console.WriteLine();
+                Console.Write("  - Getting activity stream... ");
+                var stream = client.Streams.GetActivityStream(activity.Id.ToString(), (Strava.Streams.StreamType)2047, Strava.Streams.StreamResolution.High);
+
+                foreach(var s in stream)
+                {
+                    //Console.WriteLine("   Data stream Type: " + s.StreamType + " samples: " + s.Data.Count().ToString());
+
+                    // Add data to activity memory - Sorting handeled internally
+                    data.First(i => i.ActivityID == activity.Id.ToString()).SetStreamData = s;
+                }
+                if(stream != null && stream.First().Data != null)
+                    Console.WriteLine(" " + stream.First().Data.Count() + " samples");
+
+                //Console.WriteLine();
             }
-           
+            Console.WriteLine(" - Done in " + DateTime.Now.Subtract(start).ToString());
+
+            // SAVE ACTIVITY-DATA
+            start = DateTime.Now;
+            Console.WriteLine();
+            Console.WriteLine("Printing acitivity data - Total of " + data.Count().ToString() + " activities");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"activities.csv"))
+            {
+                file.WriteLine("Timestamp;Activity;Athlete;TotalDistance;avgCadence;avgHeartrate;avgSpeed;avgTemperature;TotalCalories;SufferScore;TotalDuration;LapsCount");
+                foreach (var d in data)
+                {
+                    d.ToString();
+                }
+            }
+            Console.WriteLine(" - Done in " + DateTime.Now.Subtract(start).ToString());
+
+            // SAVE LAP-DATA
+            start = DateTime.Now;
+            Console.WriteLine();
+            Console.WriteLine("Printing acitivity data - Total of " + data.Sum(i => i.LapCount).ToString() + " laps");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"laps.csv"))
+            {
+                file.WriteLine("Timestamp;Activity;Lap;Distance;Length;Duration;Cadence;Heartrate;Speed;ElevationGain;MaxHeartrate");
+                foreach (var d in data)
+                {
+                    foreach (var l in d.Laps)
+                    {
+                        file.WriteLine(d.Timestamp + ";" + d.ActivityID + ";" + l.ToString());
+                    }
+                }
+            }
+            Console.WriteLine(" - Done in " + DateTime.Now.Subtract(start).ToString());
+
+            // SAVE SPLIT-DATA
+            start = DateTime.Now;
+            Console.WriteLine();            
+            float splits = 0.25f;
+
+            Console.WriteLine("Printing activity data with custom split lengths - Total of " + data.Sum(i => i.GetCustomSplits(splits).Count()).ToString() + " splits of " + splits.ToString("N3") + " km");
+            Console.WriteLine(" - Total of " + data.Sum(i => i.GetCustomSplits(splits).Sum(j => j.Distance)).ToString() + " km");
+
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"splits.csv"))
+            {
+                file.WriteLine("Timestamp;Activity;Time;Altitude;Velocity;Cadence;Grade;Heartrate;Temperature;Distance;Moving");
+                //Console.WriteLine("Time;Altitude;Velocity;Cadence;Grade;Heartrate;Temperature;Distance;Moving");
+                foreach (var d in data)
+                {
+                    foreach (var l in d.GetCustomSplits(splits))
+                    {
+                        //Console.WriteLine(l.ToString());
+                        file.WriteLine(d.Timestamp + ";" + d.ActivityID + ";" + l.ToString());
+                    }
+                }
+            }
+            Console.WriteLine(" - Done in " + DateTime.Now.Subtract(start).ToString());
+
             return "";
         }
 
